@@ -27,6 +27,7 @@ jobs:
         run: npm run build:exe
 
       - name: Package zip (exe + credentials.json)
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'feat') }}"
         shell: pwsh
         run: |
           Compress-Archive -Path "dist/demscans-reactbot.exe","dist/credentials.json" -DestinationPath "dist/demscans-reactbot.zip" -Force
@@ -38,6 +39,7 @@ jobs:
           $v = node -p "require('./package.json').version"; echo "ver=$v" >> $env:GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'feat') }}"
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.pkg.outputs.ver }}-${{ github.run_number }}
