@@ -1,0 +1,30 @@
+{
+  "name": "demscans-reactbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx bot.ts",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "pkg": "npm run build:ts && node -e \"require('fs').copyFileSync('dist/bot.js','dist/bot.cjs')\" && pkg dist/bot.cjs -t node18-win-x64 -o dist/demscans-reactbot.exe",
+    "build:exe": "npm run pkg"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.56.0"
+  },
+  "pkg": {
+    "assets": [
+      "node_modules/playwright/**/*"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.2",
+    "pkg": "^5.8.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}
