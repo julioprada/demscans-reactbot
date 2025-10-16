@@ -24,7 +24,9 @@ try {
 
 // For local development (not packaged), allow OS env vars to override/replace credentials.json values
 if (!isPackaged) {
-  try { dotenv.config(); } catch {}
+  try {
+    dotenv.config();
+  } catch {}
   const envUser = process.env.DEMONIC_EMAIL || process.env.email || "";
   const envPass = process.env.DEMONIC_PASSWORD || process.env.password || "";
   if (envUser) USERNAME = envUser;
@@ -208,7 +210,9 @@ async function waitForUserToSelectManga(
 
       const selected = winner.page;
       if (winner.kind === "new") {
-        try { await page.close(); } catch {}
+        try {
+          await page.close();
+        } catch {}
       }
       console.log("📖 Manga selected:", selected.url());
       return selected;
@@ -216,7 +220,9 @@ async function waitForUserToSelectManga(
       const msg = String(err?.message || err || "");
       if (msg.includes("closed")) {
         console.warn("⚠️ Page closed while waiting; reopening homepage...");
-        try { page = await context.newPage(); } catch {}
+        try {
+          page = await context.newPage();
+        } catch {}
         continue;
       }
       throw err;
