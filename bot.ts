@@ -1,9 +1,35 @@
-import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import dotenv from "dotenv";
 import { chromium } from "playwright";
-import type { Page } from "playwright";
+import type { Page, BrowserContext } from "playwright";
 
-const USERNAME = process.env.DEMONIC_EMAIL ?? "";
-const PASSWORD = process.env.DEMONIC_PASSWORD ?? "";
+// Resolve path next to the packaged exe (when built) or current working directory (when running via npm).
+const isPackaged = !!(process as any).pkg;
+const execDir = (process as any).pkg
+  ? path.dirname(process.execPath)
+  : process.cwd();
+const credPath = path.join(execDir, "credentials.json");
+
+let USERNAME = "";
+let PASSWORD = "";
+try {
+  const raw = fs.readFileSync(credPath, "utf8");
+  const cfg = JSON.parse(raw);
+  USERNAME = cfg.DEMONIC_EMAIL || cfg.email || "";
+  PASSWORD = cfg.DEMONIC_PASSWORD || cfg.password || "";
+} catch (e) {
+  console.error(`Missing or invalid credentials.json at: ${credPath}`);
+}
+
+// For local development (not packaged), allow OS env vars to override/replace credentials.json values
+if (!isPackaged) {
+  try { dotenv.config(); } catch {}
+  const envUser = process.env.DEMONIC_EMAIL || process.env.email || "";
+  const envPass = process.env.DEMONIC_PASSWORD || process.env.password || "";
+  if (envUser) USERNAME = envUser;
+  if (envPass) PASSWORD = envPass;
+}
 const BASE_URL = "https://demonicscans.org/";
 const STAMINA_SAFETY_MARGIN = 60; // stop this many points before stamina cap
 const BLOCK_AUTO_REFRESH = false; // set to true to block auto reloads/redirects
@@ -79,6 +105,12 @@ function attachPageListeners(page: Page) {
 }
 
 async function login(page: Page) {
+  if (!USERNAME || !PASSWORD) {
+    const hint = isPackaged
+      ? `Please create credentials.json next to the executable with {\n  "DEMONIC_EMAIL": "you@example.com",\n  "DEMONIC_PASSWORD": "secret"\n}`
+      : `Set OS env vars DEMONIC_EMAIL and DEMONIC_PASSWORD or create credentials.json in the project root.`;
+    throw new Error(`Credentials not set. ${hint}`);
+  }
   // Go directly to the sign-in page
   await page.goto(new URL("signin.php", BASE_URL).toString(), {
     waitUntil: "domcontentloaded",
@@ -151,15 +183,45 @@ async function reactToChapter(page: Page, chapterUrl: string) {
 // Removed unused helper that collected chapter links from homepage
 
 // Wait for the user to manually click a manga on the homepage
-async function waitForUserToSelectManga(page: Page): Promise<string> {
-  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-  console.log(
-    "➡️ Please click a manga on the homepage. Waiting for navigation to a /manga/... page..."
-  );
-  await page.waitForURL(/\/manga\//, { timeout: 0 });
-  const url = page.url();
-  console.log("📖 Manga selected:", url);
-  return url;
+async function waitForUserToSelectManga(
+  context: BrowserContext,
+  page: Page
+): Promise<Page> {
+  while (true) {
+    try {
+      await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+    } catch {}
+    console.log(
+      "➡️ Please click a manga on the homepage. Waiting for navigation to a /manga/... page..."
+    );
+
+    try {
+      const winner = await Promise.race([
+        page
+          .waitForURL(/\/manga\//, { timeout: 0 })
+          .then(() => ({ kind: "same", page })),
+        context.waitForEvent("page", { timeout: 0 }).then(async (p) => {
+          await p.waitForURL(/\/manga\//, { timeout: 0 });
+          return { kind: "new", page: p } as const;
+        }),
+      ] as const);
+
+      const selected = winner.page;
+      if (winner.kind === "new") {
+        try { await page.close(); } catch {}
+      }
+      console.log("📖 Manga selected:", selected.url());
+      return selected;
+    } catch (err: any) {
+      const msg = String(err?.message || err || "");
+      if (msg.includes("closed")) {
+        console.warn("⚠️ Page closed while waiting; reopening homepage...");
+        try { page = await context.newPage(); } catch {}
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // From a manga page, collect its chapter links
@@ -229,14 +291,14 @@ async function runBot() {
     if (type === "image" || type === "media") return route.abort();
     return route.continue();
   });
-  const page = await context.newPage();
+  let page = await context.newPage();
   attachPageListeners(page);
 
   // // 1) Login (uncomment after setting USERNAME/PASSWORD)
   await login(page);
 
-  // 2) Let user pick a manga manually from the homepage
-  await waitForUserToSelectManga(page);
+  // 2) Let user pick a manga manually from the homepage (handle new tab or page close)
+  page = await waitForUserToSelectManga(context, page);
 
   // 3) Collect its chapters (latest first)
   const chapters = await getChapterLinksFromMangaPage(page);

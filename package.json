@@ -6,7 +6,7 @@
   "scripts": {
     "start": "tsx bot.ts",
     "build:ts": "tsc -p tsconfig.build.json",
-    "pkg": "npm run build:ts && node -e \"require('fs').copyFileSync('dist/bot.js','dist/bot.cjs')\" && pkg dist/bot.cjs -t node18-win-x64 -o dist/demscans-reactbot.exe",
+    "pkg": "node -e \"try{require('fs').rmSync('dist',{recursive:true,force:true});}catch(e){};require('fs').mkdirSync('dist',{recursive:true});\" && npm run build:ts && node -e \"require('fs').mkdirSync('scripts',{recursive:true});require('fs').copyFileSync('build/bot.js','scripts/tmp-entry.cjs')\" && pkg scripts/tmp-entry.cjs -t node18-win-x64 -o dist/demscans-reactbot.exe && node -e \"const fs=require('fs');if(fs.existsSync('credentials.json')){fs.copyFileSync('credentials.json','dist/credentials.json')}else{fs.writeFileSync('dist/credentials.json','{\\n  \\\"DEMONIC_EMAIL\\\": \\\"\\\",\\n  \\\"DEMONIC_PASSWORD\\\": \\\"\\\"\\n}\\n');}\" && node scripts/cleanup-dist.cjs && node scripts/prune-dist.cjs",
     "build:exe": "npm run pkg"
   },
   "keywords": [],
